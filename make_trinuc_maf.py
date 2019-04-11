@@ -13,8 +13,19 @@ def normalizeTrinuc(trinuc):
         return trinuc
 
 
+def clean_up():
+    print("Cleaning up")
+    subprocess.call("rm -f ___tmp.maf".split(" "))
+    subprocess.call("rm -f ___tmp.bed".split(" "))
+    subprocess.call("rm -f ___tmp.tsv".split(" "))
+
+
 def fetch_regions(ref_fasta):
-    """Fetch regions from reference genome"""
+    """
+    Fetch regions from reference genome
+    Original command:
+    bedtools getfasta -tab -fi /ifs/depot/assemblies/H.sapiens/GRCh37/gr37.fasta -bed ___tmp.bed -fo ___tmp.tsv
+    """
 
     print("Getting regions")
     args = [
@@ -29,36 +40,10 @@ def fetch_regions(ref_fasta):
         "___tmp.tsv",
     ]
 
-    # bed_tools_cmd = "bedtools getfasta -tab -fi /ifs/depot/assemblies/H.sapiens/GRCh37/gr37.fasta -bed ___tmp.bed -fo ___tmp.tsv".split(" ")
     subprocess.call(args)
 
 
-def main(from_maf, to_maf, ref_fasta):
-    fromf = open(from_maf, "r")
-    tof = open(to_maf, "w")
-    tmpf = open("___tmp.maf", "w")
-
-    # First get rid of non-SNP mutations
-    print("Ignoring non-SNP mutations")
-    firstline = fromf.readline()
-    while firstline.startswith("#"):
-        firstline = fromf.readline()
-    lines = list(map(strip, firstline.split("\t")))
-    indels = []
-    type_col = lines[0].index("Variant_Type")
-
-    for line in fromf:
-        split_line = list(map(strip, line.split("\t")))
-        type = split_line[type_col]
-        if type == "SNP":
-            lines.append(split_line)
-        if type != "SNP":
-            indels.append(split_line)
-
-    tmpf.write(join([join(x, "\t") for x in lines], "\n"))
-    tmpf.flush()
-
-    # Make bed file of regions
+def make_bedfile():
     print("Making bed file")
     grep_ps = subprocess.Popen(
         ["grep", "-Ev", "^#|^Hugo", "___tmp.maf"], stdout=subprocess.PIPE
@@ -66,7 +51,6 @@ def main(from_maf, to_maf, ref_fasta):
     cut_ps = subprocess.Popen(
         "cut -f5-7".split(" "), stdin=grep_ps.stdout, stdout=subprocess.PIPE
     )
-    # awk_ps = subprocess.Popen(["awk", "{OFS=\"\\t\"; print $1,$2-2,$3+1}"], stdin=cut_ps.stdout, stdout=subprocess.PIPE)
     awk_ps = subprocess.Popen(
         [
             "awk",
@@ -75,28 +59,59 @@ def main(from_maf, to_maf, ref_fasta):
         stdin=cut_ps.stdout,
         stdout=subprocess.PIPE,
     )
-    bedf = open("___tmp.bed", "w")
-    bedf.write(awk_ps.communicate()[0])
-    bedf.close()
 
-    # Fetch regions
+    # Write out to bed
+    with open("___tmp.bed", "w") as bedf:
+        bedf.write(awk_ps.communicate()[0])
+
+
+def main(from_maf, to_maf, ref_fasta):
+    """Run everything"""
+
+    # First get rid of non-SNP mutations
+    print("Ignoring non-SNP mutations")
+    with open(from_maf, "r") as fromf:
+        firstline = fromf.readline()
+        while firstline.startswith("#"):
+            firstline = fromf.readline()
+        lines = list(map(strip, firstline.split("\t")))
+        indels = []
+        type_col = lines[0].index("Variant_Type")
+
+        for line in fromf:
+            split_line = list(map(strip, line.split("\t")))
+            type = split_line[type_col]
+            if type == "SNP":
+                lines.append(split_line)
+            if type != "SNP":
+                indels.append(split_line)
+
+    with open("___tmp.maf", "w") as tmpf:
+        tmpf.write(join([join(x, "\t") for x in lines], "\n"))
+        tmpf.flush()
+
+    # Make bed file of regions
+    make_bedfile()
+
+    # Fetch regions subprocess
     fetch_regions(ref_fasta)
 
     # Add trinuc to lines
     print("Adding trinucs (normalized to start from C or T)")
     lines[0].append("Ref_Tri")
-    trinucf = open("___tmp.tsv", "r")
-    i = 0
 
-    for line in trinucf:
-        i += 1
-        trinuc = line.split("\t")[1].strip()
-        try:
-            trinuc = normalizeTrinuc(trinuc)
-        except:
-            pass
-        lines[i].append(trinuc)
+    with open("___tmp.tsv", "r") as trinucf:
+        i = 0
+        for line in trinucf:
+            i += 1
+            trinuc = line.split("\t")[1].strip()
+            try:
+                trinuc = normalizeTrinuc(trinuc)
+            except:
+                pass
+            lines[i].append(trinuc)
 
+    # What...?
     # Add back indels
     for line in indels:
         line.append("")
@@ -104,20 +119,17 @@ def main(from_maf, to_maf, ref_fasta):
     lines.extend(indels)
 
     print("Writing to %s" % to_maf)
-    tof.write(join(map(lambda x: join(x, "\t"), lines), "\n"))
-    tof.close()
+    with open(to_maf, "w") as tof:
+        tof.write(join(map(lambda x: join(x, "\t"), lines), "\n"))
 
-    print("Cleaning up")
-    subprocess.call("rm -f ___tmp.maf".split(" "))
-    subprocess.call("rm -f ___tmp.bed".split(" "))
-    subprocess.call("rm -f ___tmp.tsv".split(" "))
+    # Clean up tmp files
+    clean_up()
 
 
 if __name__ == "__main__":
-    # Read in necessary files -JH
     if len(sys.argv) < 4:
         print(
-            "Usage: python make_trinuc_maf.py [source maf path] [target maf path]"
+            "Usage: python make_trinuc_maf.py [path to ref_fasta] [source maf path] [target maf path]"
         )
         sys.exit(0)
 

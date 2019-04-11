@@ -2,3 +2,4 @@
 .Rproj.user
 mutation-signatures.Rproj
 *~
+.env

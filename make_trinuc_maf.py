@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from __future__ import print_function
-
 import subprocess
 import sys
 from string import strip, join
@@ -14,7 +13,27 @@ def normalizeTrinuc(trinuc):
         return trinuc
 
 
-def main(from_maf, to_maf):
+def fetch_regions(ref_fasta):
+    """Fetch regions from reference genome"""
+
+    print("Getting regions")
+    args = [
+        "bedtools",
+        "getfasta",
+        "-tab",
+        "-fi",
+        ref_fasta,
+        "-bed",
+        "___tmp.bed",
+        "-fo",
+        "___tmp.tsv",
+    ]
+
+    # bed_tools_cmd = "bedtools getfasta -tab -fi /ifs/depot/assemblies/H.sapiens/GRCh37/gr37.fasta -bed ___tmp.bed -fo ___tmp.tsv".split(" ")
+    subprocess.call(args)
+
+
+def main(from_maf, to_maf, ref_fasta):
     fromf = open(from_maf, "r")
     tof = open(to_maf, "w")
     tmpf = open("___tmp.maf", "w")
@@ -61,12 +80,7 @@ def main(from_maf, to_maf):
     bedf.close()
 
     # Fetch regions
-    print("Getting regions")
-    subprocess.call(
-        "bedtools getfasta -tab -fi /ifs/depot/assemblies/H.sapiens/GRCh37/gr37.fasta -bed ___tmp.bed -fo ___tmp.tsv".split(
-            " "
-        )
-    )
+    fetch_regions(ref_fasta)
 
     # Add trinuc to lines
     print("Adding trinucs (normalized to start from C or T)")

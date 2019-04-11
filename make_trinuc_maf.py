@@ -101,13 +101,14 @@ def main(from_maf, to_maf):
 
 if __name__ == "__main__":
     # Read in necessary files -JH
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         print(
             "Usage: python make_trinuc_maf.py [source maf path] [target maf path]"
         )
         sys.exit(0)
 
-    from_maf = sys.argv[1]
-    to_maf = sys.argv[2]
+    ref_fasta = sys.argv[1]
+    from_maf = sys.argv[2]
+    to_maf = sys.argv[3]
 
-    main(from_maf, to_maf)
+    main(from_maf, to_maf, ref_fasta)
